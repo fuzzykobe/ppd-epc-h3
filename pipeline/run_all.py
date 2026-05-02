@@ -24,13 +24,15 @@ STEPS = [
     (8,  "08_build_mart",     "Build mart"),
     (9,  "09_ingest_crime",   "Ingest crime data"),
     (10, "10_apply_h3_crime", "Apply H3 to crime"),
-    (11, "11_aggregate_crime","Aggregate crime mart"),
+    (11, "11_aggregate_crime",       "Aggregate crime mart"),
+    (12, "12_ingest_income",         "Ingest ONS household income"),
+    (13, "13_build_price_income_mart","Build price-to-income mart"),
 ]
 
 
 @click.command()
 @click.option("--from-step", default=1, type=int, show_default=True,
-              help="Resume from this step number (1–11)")
+              help="Resume from this step number (1–13)")
 def main(from_step: int) -> None:
     _check_arm64()
     total_start = time.perf_counter()
