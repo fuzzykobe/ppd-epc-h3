@@ -50,5 +50,5 @@ EPC_KEEP_COLUMNS = [
 ONS_KEEP_COLUMNS = [
     "pcds", "lat", "long",
     "oa21", "lsoa21", "msoa21",
-    "ladcd", "ladnm", "rgn", "ctry",
+    "oslaua", "rgn", "ctry", "imd",
 ]

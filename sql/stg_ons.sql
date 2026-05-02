@@ -7,10 +7,10 @@ COPY (
     oa21,
     lsoa21,
     msoa21,
-    ladcd,
-    ladnm,
+    oslaua AS ladcd,
     rgn,
-    ctry
+    ctry,
+    TRY_CAST(imd AS INTEGER) AS imd_rank
   FROM read_csv(?, header=true, ignore_errors=true)
   WHERE TRY_CAST(lat AS DOUBLE) IS NOT NULL
     AND TRY_CAST(lat AS DOUBLE) != 0

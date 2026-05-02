@@ -103,9 +103,9 @@ def main() -> None:
                     o.lsoa21,
                     o.msoa21,
                     o.ladcd,
-                    o.ladnm,
                     o.rgn,
-                    o.ctry
+                    o.ctry,
+                    o.imd_rank
                 FROM with_epc t
                 LEFT JOIN '{ons}' o ON t.postcode = o.postcode
             )
