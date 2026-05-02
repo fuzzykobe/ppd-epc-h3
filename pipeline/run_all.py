@@ -14,20 +14,23 @@ def _check_arm64() -> None:
         )
 
 STEPS = [
-    (1, "01_ingest_ppd", "Ingest PPD"),
-    (2, "02_ingest_epc", "Ingest EPC"),
-    (3, "03_ingest_ons", "Ingest ONS"),
-    (4, "04_normalise", "Validate normalisation"),
-    (5, "05_match", "Address matching"),
-    (6, "06_enrich_geo", "Enrich geography"),
-    (7, "07_apply_h3", "Apply H3 indexes"),
-    (8, "08_build_mart", "Build mart"),
+    (1,  "01_ingest_ppd",     "Ingest PPD"),
+    (2,  "02_ingest_epc",     "Ingest EPC"),
+    (3,  "03_ingest_ons",     "Ingest ONS"),
+    (4,  "04_normalise",      "Validate normalisation"),
+    (5,  "05_match",          "Address matching"),
+    (6,  "06_enrich_geo",     "Enrich geography"),
+    (7,  "07_apply_h3",       "Apply H3 indexes"),
+    (8,  "08_build_mart",     "Build mart"),
+    (9,  "09_ingest_crime",   "Ingest crime data"),
+    (10, "10_apply_h3_crime", "Apply H3 to crime"),
+    (11, "11_aggregate_crime","Aggregate crime mart"),
 ]
 
 
 @click.command()
 @click.option("--from-step", default=1, type=int, show_default=True,
-              help="Resume from this step number (1–8)")
+              help="Resume from this step number (1–11)")
 def main(from_step: int) -> None:
     _check_arm64()
     total_start = time.perf_counter()

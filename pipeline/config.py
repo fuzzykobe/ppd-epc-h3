@@ -8,6 +8,8 @@ OUTPUTS = ROOT / "outputs"
 PPD_CSV = DATA_RAW / "ppd" / "pp-complete.csv"
 EPC_DIR = DATA_RAW / "epc"
 ONS_CSV = DATA_RAW / "ons" / "ONSPD_latest.csv"
+CRIME_DIR = DATA_RAW / "crime"
+CRIME_KEEP_TYPES: list[str] | None = None  # None = keep all; set to filter at ingest
 
 H3_RESOLUTIONS = [7, 8, 9, 10]
 

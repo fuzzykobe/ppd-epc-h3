@@ -65,7 +65,27 @@ def main() -> None:
         "geo_enriched_pct": round(100.0 * geo / total, 2) if total else 0,
         "h3_applied_pct": round(100.0 * h3_applied / total, 2) if total else 0,
         "run_timestamp": datetime.now(timezone.utc).isoformat(),
+        # Crime stats populated by step 11 if run
+        "crime_records_total": None,
+        "crime_date_range": None,
+        "crime_h3_coverage_pct": None,
     }
+
+    # Merge crime stats if step 11 has already written them
+    crime_h3 = DATA_STAGED / "crime_h3.parquet"
+    if crime_h3.exists():
+        c = con.execute(f"""
+            SELECT
+                COUNT(*) AS total,
+                MIN(month) AS earliest,
+                MAX(month) AS latest,
+                100.0 * COUNT(*) FILTER (WHERE h3_r7 IS NOT NULL) / COUNT(*) AS h3_pct
+            FROM '{crime_h3}'
+        """).fetchone()
+        report["crime_records_total"] = c[0]
+        report["crime_date_range"] = f"{c[1]} → {c[2]}"
+        report["crime_h3_coverage_pct"] = round(c[3], 2)
+
     report_path.write_text(json.dumps(report, indent=2))
 
     logger.success(f"Mart written. Match rate: {report['match_rate_pct']}%")

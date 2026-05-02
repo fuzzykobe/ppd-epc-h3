@@ -1,0 +1,6 @@
+Crime ID,Month,Reported by,Falls within,Longitude,Latitude,Location,LSOA code,LSOA name,Crime type,Last outcome category,Context
+abc001,2024-03,Metropolitan Police Service,Metropolitan Police Service,-0.1281,51.5080,On or near Trafalgar Square,E01000001,City of London 001A,Theft from the person,Unable to prosecute suspect,
+abc002,2024-03,Metropolitan Police Service,Metropolitan Police Service,-0.1281,51.5080,On or near Trafalgar Square,E01000001,City of London 001A,Theft from the person,Investigation complete; no suspect identified,
+abc003,2024-03,Metropolitan Police Service,Metropolitan Police Service,-0.1281,51.5080,On or near Trafalgar Square,E01000001,City of London 001A,Violence and sexual offences,Under investigation,
+abc004,2024-04,Metropolitan Police Service,Metropolitan Police Service,-0.1281,51.5080,On or near Trafalgar Square,E01000001,City of London 001A,Theft from the person,Unable to prosecute suspect,
+,2024-03,Metropolitan Police Service,Metropolitan Police Service,,, On or near Unknown,,,Other theft,,
