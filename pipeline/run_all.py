@@ -1,7 +1,17 @@
 """Orchestrator — runs all pipeline steps in order."""
+import platform
 import time
 import click
 from loguru import logger
+
+
+def _check_arm64() -> None:
+    arch = platform.machine()
+    if arch != "arm64":
+        logger.warning(
+            f"Expected native arm64 binary, got '{arch}'. "
+            "Run: python -c \"import platform; print(platform.machine())\""
+        )
 
 STEPS = [
     (1, "01_ingest_ppd", "Ingest PPD"),
@@ -19,6 +29,7 @@ STEPS = [
 @click.option("--from-step", default=1, type=int, show_default=True,
               help="Resume from this step number (1–8)")
 def main(from_step: int) -> None:
+    _check_arm64()
     total_start = time.perf_counter()
 
     for step_num, module_name, description in STEPS:

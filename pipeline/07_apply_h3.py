@@ -24,6 +24,8 @@ def main() -> None:
     if not geo_path.exists():
         raise FileNotFoundError(f"{geo_path} not found")
 
+    pl.Config.set_streaming_chunk_size(1_000_000)  # larger chunks for 48GB RAM
+
     logger.info(f"Reading {geo_path}")
     df = pl.read_parquet(str(geo_path))
 

@@ -11,10 +11,11 @@ ONS_CSV = DATA_RAW / "ons" / "ONSPD_latest.csv"
 
 H3_RESOLUTIONS = [7, 8, 9, 10]
 
-DUCKDB_THREADS = 8
-DUCKDB_MEMORY = "16GB"
+DUCKDB_THREADS = 16
+DUCKDB_MEMORY = "40GB"
 
 FUZZY_THRESHOLD = 85
+FUZZY_MAX_WORKERS = 15  # leave 1 core free for DuckDB background threads
 
 PPD_COLUMNS = [
     "transaction_id", "price", "transfer_date", "postcode",

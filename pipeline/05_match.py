@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import concurrent.futures
-import os
 from typing import Any
 
 import click
@@ -12,7 +11,7 @@ from loguru import logger
 from rapidfuzz import process, fuzz
 from tqdm import tqdm
 
-from pipeline.config import DATA_STAGED, DUCKDB_MEMORY, DUCKDB_THREADS, FUZZY_THRESHOLD
+from pipeline.config import DATA_STAGED, DUCKDB_MEMORY, DUCKDB_THREADS, FUZZY_MAX_WORKERS, FUZZY_THRESHOLD
 
 
 def _fuzzy_match_postcode(
@@ -107,10 +106,9 @@ def main() -> None:
     postcodes = [pc for pc in ppd_by_pc if pc in epc_by_pc]
     args_list = [(pc, ppd_by_pc[pc], epc_by_pc[pc]) for pc in postcodes]
 
-    workers = min(os.cpu_count() or 4, 8)
     fuzzy_rows: list[dict[str, Any]] = []
 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as pool:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=FUZZY_MAX_WORKERS) as pool:
         for batch in tqdm(
             pool.map(_fuzzy_match_postcode, args_list, chunksize=100),
             total=len(args_list),
