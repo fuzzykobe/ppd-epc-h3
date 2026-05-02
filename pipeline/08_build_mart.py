@@ -21,13 +21,15 @@ def main() -> None:
 
     con = duckdb.connect()
     con.execute(f"PRAGMA threads={DUCKDB_THREADS}")
-    con.execute(f"PRAGMA memory_limit='{DUCKDB_MEMORY}'")
+    # Use 24GB here: full-dataset ORDER BY postcode OOMs at 40GB due to sort
+    # spill overhead. Partition write doesn't need full-sort; ORDER BY year only.
+    con.execute("PRAGMA memory_limit='24GB'")
 
     logger.info(f"Writing partitioned mart to {mart_dir}")
     con.execute(f"""
         COPY (
             SELECT * FROM '{src}'
-            ORDER BY transfer_year, postcode
+            ORDER BY transfer_year
         ) TO '{mart_dir}'
         (
             FORMAT PARQUET,

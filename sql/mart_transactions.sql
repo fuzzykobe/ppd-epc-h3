@@ -1,7 +1,7 @@
 -- Final mart: write transactions_h3 partitioned by transfer_year
 COPY (
     SELECT * FROM read_parquet(?)
-    ORDER BY transfer_year, postcode
+    ORDER BY transfer_year
 ) TO ?
 (
     FORMAT PARQUET,
