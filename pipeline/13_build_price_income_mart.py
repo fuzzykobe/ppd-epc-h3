@@ -83,6 +83,8 @@ def main() -> None:
 
     # Financial year alignment: financial_year 2021 = year "2021-22" covers Apr 2021–Mar 2022.
     # We match transfer_year to financial_year (e.g. transfer_year=2021 → financial_year=2021).
+    # DuckDB 1.x doesn't support FILTER on ordered-set aggregates (PERCENTILE_CONT).
+    # Workaround: separate FTB CTE that pre-filters to flats+terraced.
     con.execute("""
         CREATE OR REPLACE TEMP TABLE mart AS
         WITH tx_income AS (
@@ -91,46 +93,46 @@ def main() -> None:
                 t.rgn,
                 t.price,
                 t.property_type,
-                t.msoa21,
-                i.net_income_median              AS msoa_income_median,
-                i.net_income_mean                AS msoa_income_mean
+                i.net_income_median              AS msoa_income_median
             FROM transactions t
             JOIN income i
                 ON t.msoa21 = i.msoa_code
                AND t.transfer_year = i.financial_year
             WHERE t.rgn IS NOT NULL
               AND t.price > 10000
-              AND t.rgn NOT LIKE 'S%'     -- exclude Scotland (no MSOA income data)
+              AND t.rgn NOT LIKE 'S%'
               AND i.net_income_median > 1000
         ),
-        regional AS (
-            SELECT
-                year,
-                rgn,
-                MEDIAN(price)::DOUBLE                                     AS median_price,
-                MEDIAN(msoa_income_median)::DOUBLE                        AS median_income,
-                MEDIAN(price)::DOUBLE / NULLIF(MEDIAN(msoa_income_median)::DOUBLE, 0)
-                                                                          AS price_to_income_ratio,
-                PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price)::DOUBLE
-                    FILTER (WHERE property_type IN ('F','T'))             AS ftb_proxy_price,
-                COUNT(*)                                                  AS n_transactions
+        all_props AS (
+            SELECT year, rgn,
+                MEDIAN(price)::DOUBLE                AS median_price,
+                MEDIAN(msoa_income_median)::DOUBLE   AS median_income,
+                COUNT(*)                             AS n_transactions
             FROM tx_income
+            GROUP BY year, rgn
+        ),
+        ftb_props AS (
+            SELECT year, rgn,
+                PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price)::DOUBLE AS ftb_proxy_price
+            FROM tx_income
+            WHERE property_type IN ('F', 'T')
             GROUP BY year, rgn
         )
         SELECT
-            r.year,
-            r.rgn,
-            r.median_price,
-            r.median_income,
-            r.price_to_income_ratio,
-            r.ftb_proxy_price,
-            r.ftb_proxy_price / NULLIF(r.median_income, 0)               AS ftb_price_to_income,
-            r.n_transactions
-        FROM regional r
-        WHERE r.year BETWEEN 2002 AND 2025
-          AND r.median_price IS NOT NULL
-          AND r.median_income IS NOT NULL
-        ORDER BY r.year, r.rgn
+            a.year,
+            a.rgn,
+            a.median_price,
+            a.median_income,
+            a.median_price / NULLIF(a.median_income, 0)                   AS price_to_income_ratio,
+            f.ftb_proxy_price,
+            f.ftb_proxy_price / NULLIF(a.median_income, 0)                AS ftb_price_to_income,
+            a.n_transactions
+        FROM all_props a
+        LEFT JOIN ftb_props f ON a.year = f.year AND a.rgn = f.rgn
+        WHERE a.year BETWEEN 2002 AND 2025
+          AND a.median_price IS NOT NULL
+          AND a.median_income IS NOT NULL
+        ORDER BY a.year, a.rgn
     """)
 
     # ── National (excl London) aggregates ──────────────────────────────────
@@ -150,24 +152,36 @@ def main() -> None:
               AND t.rgn NOT IN ('E12000007', 'S99999999')
               AND t.price > 10000
               AND i.net_income_median > 1000
+        ),
+        all_props AS (
+            SELECT year,
+                MEDIAN(price)::DOUBLE               AS median_price,
+                MEDIAN(msoa_income_median)::DOUBLE  AS median_income,
+                COUNT(*)                            AS n_transactions
+            FROM tx_income
+            WHERE year BETWEEN 2002 AND 2025
+            GROUP BY year
+        ),
+        ftb_props AS (
+            SELECT year,
+                PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price)::DOUBLE AS ftb_proxy_price
+            FROM tx_income
+            WHERE property_type IN ('F', 'T')
+              AND year BETWEEN 2002 AND 2025
+            GROUP BY year
         )
         SELECT
-            year,
-            'excl_london'                                                  AS rgn,
-            MEDIAN(price)::DOUBLE                                          AS median_price,
-            MEDIAN(msoa_income_median)::DOUBLE                             AS median_income,
-            MEDIAN(price)::DOUBLE / NULLIF(MEDIAN(msoa_income_median)::DOUBLE, 0)
-                                                                           AS price_to_income_ratio,
-            PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price)::DOUBLE
-                FILTER (WHERE property_type IN ('F','T'))                  AS ftb_proxy_price,
-            PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price)::DOUBLE
-                FILTER (WHERE property_type IN ('F','T'))
-                / NULLIF(MEDIAN(msoa_income_median)::DOUBLE, 0)            AS ftb_price_to_income,
-            COUNT(*)                                                        AS n_transactions
-        FROM tx_income
-        WHERE year BETWEEN 2002 AND 2025
-        GROUP BY year
-        HAVING MEDIAN(price) IS NOT NULL
+            a.year,
+            'excl_london'                                                   AS rgn,
+            a.median_price,
+            a.median_income,
+            a.median_price / NULLIF(a.median_income, 0)                    AS price_to_income_ratio,
+            f.ftb_proxy_price,
+            f.ftb_proxy_price / NULLIF(a.median_income, 0)                 AS ftb_price_to_income,
+            a.n_transactions
+        FROM all_props a
+        LEFT JOIN ftb_props f ON a.year = f.year
+        WHERE a.median_price IS NOT NULL
     """)
 
     count = con.execute("SELECT COUNT(*) FROM mart").fetchone()[0]
