@@ -2,10 +2,12 @@
 data/
 outputs/
 
-# Raw formats
+# Raw formats (large data files — never commit)
 *.csv
 *.zip
 *.gz
+# Exception: small test fixtures are fine
+!tests/fixtures/*.csv
 
 # Secrets
 .env
