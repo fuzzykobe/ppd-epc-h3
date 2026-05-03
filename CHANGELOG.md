@@ -4,6 +4,17 @@ All notable changes are documented here. This project follows [Semantic Versioni
 
 ---
 
+## [1.0.1] — 2026-05-03
+
+### Changed
+
+- README: documented crime (steps 09–11) and income (steps 12–13) pipeline stages
+- README: expanded pipeline steps table with output filenames, row counts, and timings for all 13 steps
+- README: added Mart Outputs table (mart_transactions, mart_crime, mart_crime_monthly, mart_price_income)
+- README: added PropMap consumption note with link
+
+---
+
 ## [1.0.0] — 2026-05-03
 
 ### Added

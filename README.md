@@ -31,6 +31,21 @@ Each matched transaction is then:
 
 Final output is written as Parquet partitioned by `transfer_year`, one file per year.
 
+### Additional datasets
+
+**Police Street Crime (steps 09–11)**
+
+Monthly street-level crime records from [data.police.uk](https://data.police.uk), covering all 43 England & Wales forces. 17.6 M records spanning Apr 2023 – Mar 2026, disaggregated by crime category and LSOA. Each record is matched to the nearest H3 cell (r7–r10 via centroid lookup) then aggregated into two marts:
+
+- `mart_crime` — annual total crimes per H3 cell (long format, 11.9 M rows)
+- `mart_crime_monthly` — monthly counts pivoted wide by crime category per H3 cell (7.1 M rows)
+
+**ONS Household Income (steps 12–13)**
+
+MSOA-level net household income estimates from ONS, covering 2011–2023 (~50 k rows per release year). Gap years within the series are linearly interpolated; 2024–2026 are projected forward using the 2021–2023 CAGR for each region. The result is joined to `mart_transactions` to produce:
+
+- `mart_price_income` — median sale price and household income by region × year, used to compute price-to-income ratios and first-time-buyer affordability proxies in PropMap.
+
 ---
 
 ## Data volume
@@ -86,22 +101,39 @@ Full schema: see [`pipeline/06_enrich_geo.py`](pipeline/06_enrich_geo.py) and [`
 
 ---
 
-## Pipeline step timings (M4 Mac Mini, 16-core, 48 GB)
+## Pipeline steps (M4 Mac Mini, 16-core, 48 GB)
 
-| Step | Script | Description | Time |
-|---|---|---|---|
-| 1 | `01_ingest_ppd.py` | `pp-complete.csv` → `stg_ppd.parquet` | ~9.5s |
-| 2 | `02_ingest_epc.py` | `epc/**/*.csv` → `stg_epc.parquet` (deduped) | ~70s |
-| 3 | `03_ingest_ons.py` | `ONSPD_latest.csv` → `stg_ons.parquet` | ~1s |
-| 4 | `04_normalise.py` | Validates `addr_key` on both staging tables | <1s |
-| 5 | `05_match.py` | PPD + EPC → `matches_all.parquet` | ~71s |
-| 6 | `06_enrich_geo.py` | PPD + matches + EPC + ONS → `transactions_geo.parquet` | ~12s |
-| 7 | `07_apply_h3.py` | `transactions_geo` → `transactions_h3.parquet` | ~77s |
-| 8 | `08_build_mart.py` | `transactions_h3` → `outputs/mart_transactions/` | ~2m30s |
-| — | Crime + income steps | `09`–`13` ingest, aggregate, build mart | ~30s |
-| **Total** | | | **~5 min** |
+| Step | Script | Output | Rows | Time |
+|---|---|---|---|---|
+| 01 | `01_ingest_ppd.py` | `stg_ppd.parquet` | 29.4 M | 9.5 s |
+| 02 | `02_ingest_epc.py` | `stg_epc.parquet` | 21.2 M | 70 s |
+| 03 | `03_ingest_ons.py` | `stg_ons.parquet` | 2.7 M | 0.8 s |
+| 04 | `04_normalise.py` | — (validation) | — | 0.4 s |
+| 05 | `05_match.py` | `matches_all.parquet` | 29.4 M | 71 s |
+| 06 | `06_enrich_geo.py` | `transactions_geo.parquet` | 29.4 M | 12 s |
+| 07 | `07_apply_h3.py` | `transactions_h3.parquet` | 29.4 M | 77 s |
+| 08 | `08_build_mart.py` | `mart_transactions/` | 29.4 M | 2 m 35 s |
+| 09 | `09_ingest_crime.py` | `stg_crime.parquet` | 17.6 M | 10 s |
+| 10 | `10_apply_h3_crime.py` | `crime_h3.parquet` | 17.6 M | 40 s |
+| 11 | `11_aggregate_crime.py` | `mart_crime/` | 11.9 M | 28 s |
+| 12 | `12_ingest_income.py` | `stg_income.parquet` | ~50 k | — |
+| 13 | `13_build_price_income.py` | `mart_price_income/` | — | — |
+| **Total** | | | | **~5 min** |
 
 End-to-end runtime (excluding data download): **~5 minutes**.
+
+---
+
+## Mart outputs
+
+| Mart | Rows | Size | Partitioned by |
+|---|---|---|---|
+| `mart_transactions/` | 29.4 M | 2.67 GB | `transfer_year` |
+| `mart_crime/` (long) | 11.9 M | 152 MB | `year` |
+| `mart_crime_monthly/` (wide pivot) | 7.1 M | 92 MB | `year` |
+| `mart_price_income/` | — | — | `year` |
+
+These marts are consumed by **[PropMap](https://github.com/fuzzykobe/ppd-epc-h3-viz)**, which provides a FastAPI + DuckDB backend and React/DeckGL/MapLibre frontend with predictive analytics powered by scikit-learn and statsmodels.
 
 ---
 
@@ -223,9 +255,14 @@ ppd-epc-h3/
 │   ├── 04_normalise.py    # addr_key validation
 │   ├── 05_match.py        # exact + fuzzy address matching
 │   ├── 06_enrich_geo.py   # join to ONS lat/lon
-│   ├── 07_apply_h3.py     # H3 spatial indexing
-│   ├── 08_build_mart.py   # partitioned Parquet output
-│   └── run_all.py         # orchestrator with --from-step flag
+│   ├── 07_apply_h3.py          # H3 spatial indexing
+│   ├── 08_build_mart.py        # partitioned Parquet output → mart_transactions
+│   ├── 09_ingest_crime.py      # data.police.uk CSV → stg_crime.parquet
+│   ├── 10_apply_h3_crime.py    # crime LSOA centroids → H3 cells
+│   ├── 11_aggregate_crime.py   # mart_crime + mart_crime_monthly
+│   ├── 12_ingest_income.py     # ONS MSOA income Excel → stg_income.parquet
+│   ├── 13_build_price_income.py # price × income join → mart_price_income
+│   └── run_all.py              # orchestrator with --from-step flag
 ├── sql/                   # DuckDB SQL templates for each stage
 ├── tests/                 # unit tests + fixture CSVs
 ├── data/                  # gitignored — user downloads here
