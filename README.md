@@ -4,6 +4,8 @@ A fully open, reproducible Python pipeline that links every residential property
 
 The output is a single Parquet mart — partitioned by year, compressed with Zstandard — covering 29.4 million Category A transactions from 1995 to 2026, with 70.4% matched to an EPC and 99.9% geocoded.
 
+**Used by:** [PropMap](https://github.com/fuzzykobe/ppd-epc-h3-viz) — an interactive property-market analytics platform that consumes these Parquet marts to serve a FastAPI + DuckDB backend and a React/DeckGL/MapLibre frontend.
+
 ---
 
 ## What it does
@@ -28,6 +30,28 @@ Each matched transaction is then:
 - Indexed into [Uber H3](https://h3geo.org/) hexagonal cells at resolutions 7, 8, 9, and 10
 
 Final output is written as Parquet partitioned by `transfer_year`, one file per year.
+
+---
+
+## Data volume
+
+| Metric | Value |
+|---|---|
+| PPD Category A transactions | 29,429,065 |
+| Date range | 1995-01-01 → 2026-03-31 |
+| Output mart size | 2.67 GB (32 year-partition files) |
+| Median sale price | £156,995 |
+
+## Match rate
+
+| Stage | Count | Share |
+|---|---|---|
+| Exact matches | 16,003,795 | 54.4% |
+| Fuzzy matches | 4,704,430 | 16.0% |
+| **Total matched** | **20,708,225** | **70.4%** |
+| Unmatched | 8,720,840 | 29.6% |
+| Geo-enriched (lat/lon present) | 29,395,660 | 99.94% |
+| H3 indexed | 29,395,660 | 99.94% |
 
 ---
 
@@ -62,28 +86,28 @@ Full schema: see [`pipeline/06_enrich_geo.py`](pipeline/06_enrich_geo.py) and [`
 
 ---
 
-## Benchmark results (full run, May 2026)
+## Pipeline step timings (M4 Mac Mini, 16-core, 48 GB)
 
-| Metric | Value |
-|---|---|
-| PPD Category A transactions | 29,429,065 |
-| Exact matches | 16,003,795 (54.4%) |
-| Fuzzy matches | 4,704,430 (16.0%) |
-| **Total matched** | **20,708,225 (70.4%)** |
-| Unmatched | 8,720,840 (29.6%) |
-| Geo-enriched (lat/lon) | 99.94% |
-| H3 indexed | 99.94% |
-| Median sale price | £156,995 |
-| Date range | 1995-01-01 → 2026-03-31 |
-| Output mart size | 2.67 GB (32 year-partition files) |
+| Step | Script | Description | Time |
+|---|---|---|---|
+| 1 | `01_ingest_ppd.py` | `pp-complete.csv` → `stg_ppd.parquet` | ~9.5s |
+| 2 | `02_ingest_epc.py` | `epc/**/*.csv` → `stg_epc.parquet` (deduped) | ~70s |
+| 3 | `03_ingest_ons.py` | `ONSPD_latest.csv` → `stg_ons.parquet` | ~1s |
+| 4 | `04_normalise.py` | Validates `addr_key` on both staging tables | <1s |
+| 5 | `05_match.py` | PPD + EPC → `matches_all.parquet` | ~71s |
+| 6 | `06_enrich_geo.py` | PPD + matches + EPC + ONS → `transactions_geo.parquet` | ~12s |
+| 7 | `07_apply_h3.py` | `transactions_geo` → `transactions_h3.parquet` | ~77s |
+| 8 | `08_build_mart.py` | `transactions_h3` → `outputs/mart_transactions/` | ~2m30s |
+| — | Crime + income steps | `09`–`13` ingest, aggregate, build mart | ~30s |
+| **Total** | | | **~5 min** |
 
-End-to-end runtime on M4 Mac Mini (16-core, 48 GB): **~6 minutes** (excluding data download).
+End-to-end runtime (excluding data download): **~5 minutes**.
 
 ---
 
 ## Data sources
 
-All three datasets are free and licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/). See [`LICENCES_DATA.md`](LICENCES_DATA.md) for full attribution.
+All three core datasets are free and licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/). See [`LICENCES_DATA.md`](LICENCES_DATA.md) for full attribution.
 
 ### 1. HM Land Registry — Price Paid Data
 
@@ -97,11 +121,10 @@ wget -O data/raw/ppd/pp-complete.csv \
 
 ### 2. MHCLG — Domestic Energy Performance Certificates
 
-> **Important:** The original service at `epc.opendatacommunities.org` **retires on 30 May 2026**.
-> The replacement is the MHCLG "Get energy performance of buildings data" service at
-> **https://get-energy-performance-data.communities.gov.uk**
-> Download the bulk domestic dataset from there. The ingest script (`02_ingest_epc.py`) is
-> compatible with either source as long as the CSV headers match.
+> **New service:** The original `epc.opendatacommunities.org` **retired on 30 May 2026**.  
+> Use the replacement MHCLG "Get energy performance of buildings data" service:  
+> **https://get-energy-performance-data.communities.gov.uk**  
+> Download the bulk domestic dataset from there. `02_ingest_epc.py` is compatible as long as CSV headers match.
 
 - Login required (free registration)
 - Download the full **domestic bulk ZIP**
@@ -150,7 +173,7 @@ data/
 ## Running the pipeline
 
 ```bash
-# Run all 8 steps end-to-end
+# Run all steps end-to-end
 uv run python pipeline/run_all.py
 
 # Resume from a specific step (e.g. after tweaking the match threshold)
@@ -160,19 +183,6 @@ uv run python pipeline/run_all.py --from-step 5
 uv run python pipeline/01_ingest_ppd.py
 uv run python pipeline/05_match.py
 ```
-
-### Pipeline steps
-
-| Step | Script | Input → Output | Approx time |
-|---|---|---|---|
-| 1 | `01_ingest_ppd.py` | `pp-complete.csv` → `stg_ppd.parquet` | ~10s |
-| 2 | `02_ingest_epc.py` | `epc/**/*.csv` → `stg_epc.parquet` (deduped) | ~70s |
-| 3 | `03_ingest_ons.py` | `ONSPD_latest.csv` → `stg_ons.parquet` | ~1s |
-| 4 | `04_normalise.py` | Validates `addr_key` on both staging tables | <1s |
-| 5 | `05_match.py` | PPD + EPC → `matches_all.parquet` | ~70s |
-| 6 | `06_enrich_geo.py` | PPD + matches + EPC + ONS → `transactions_geo.parquet` | ~12s |
-| 7 | `07_apply_h3.py` | `transactions_geo` → `transactions_h3.parquet` | ~80s |
-| 8 | `08_build_mart.py` | `transactions_h3` → `outputs/mart_transactions/` | ~2m30s |
 
 After a full run, `outputs/match_report.json` contains match rate and coverage statistics.
 
@@ -190,7 +200,7 @@ uv run pytest tests/ -v
 
 ## Hardware notes
 
-The pipeline is optimised for **Apple Silicon (M-series)** with ≥16 GB unified memory. Tested on M4 Mac Mini (16-core CPU, 48 GB).
+The pipeline is optimised for **Apple Silicon (M-series)** with ≥ 16 GB unified memory. Tested on M4 Mac Mini (16-core CPU, 48 GB).
 
 - All dependencies install as native `arm64` binaries — do not run under Rosetta
 - DuckDB is configured with `PRAGMA threads=16` and `PRAGMA memory_limit='40GB'` for the join-heavy steps
@@ -228,3 +238,9 @@ ppd-epc-h3/
 
 - [Centre for Net Zero — epc-ppd-address-matching](https://github.com/centrefornetzero/epc-ppd-address-matching) — rule-based Python matching, Parquet-native
 - [Bin-Chi — Link-LR-PPD-and-Domestic-EPCs](https://github.com/Bin-Chi/Link-LR-PPD-and-Domestic-EPCs) — academic R pipeline, 93.15% match rate benchmark (post-2008 matched properties only)
+
+---
+
+## Versioning
+
+This project follows [Semantic Versioning](https://semver.org/). See [CHANGELOG.md](CHANGELOG.md) for the full history.
